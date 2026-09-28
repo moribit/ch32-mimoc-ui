@@ -8,8 +8,8 @@ pub fn build(b: *std.Build) void {
     const mimoc_dep = b.dependency("mimoc_ui", .{ .target = target, .optimize = optimize });
     const hal = ch32.halModule(ch32_dep.builder);
     const options = b.addOptions();
-    options.addOption(usize, "max_nodes", b.option(usize, "max_nodes", "Mimoc UI node capacity") orelse 8);
-    options.addOption(usize, "max_animations", b.option(usize, "max_animations", "Mimoc UI animation capacity") orelse 1);
+    options.addOption(usize, "max_nodes", b.option(usize, "max_nodes", "Mimoc UI node capacity") orelse 10);
+    options.addOption(usize, "max_animations", b.option(usize, "max_animations", "Mimoc UI animation capacity") orelse 0);
 
     // ch32fun_zig owns reset/interrupt startup; Mimoc UI remains an
     // application-only dependency, never a dependency of the HAL.

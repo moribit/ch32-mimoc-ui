@@ -7,27 +7,37 @@ pub const ch32fun_ssd1306_buffer_mode = .page;
 pub const ch32fun_ssd1306_basic_ascii_font = true;
 pub const ch32fun_swio_log_enabled = false;
 
-const Ui = ui.runtime.Runtime(.{ .max_nodes = options.max_nodes, .max_animations = options.max_animations });
-var runtime: Ui = .{};
+const Id = enum(u16) { screen, title, wifi, bluetooth, progress, icon };
+const Display = ui.runtime.Runtime(.{ .max_nodes = options.max_nodes, .max_animations = options.max_animations });
+const View = ui.ui.Ui(Id, Display.configuration);
+var runtime: Display = .{};
+var wifi = true;
+var bluetooth = false;
+var progress: u16 = 25;
 
 fn rebuild() void {
-    var view = runtime.beginView();
-    view.begin(0, .stack, 0, 0, .start) catch unreachable;
-    view.begin(1, .column, 2, 1, .start) catch unreachable;
-    ui.widgets.text(&view, 2, "MO-BUS") catch unreachable;
-    view.add(.{ .id = 3, .kind = .divider, .min_size = .{ .w = 124, .h = 1 } }) catch unreachable;
-    view.add(.{ .id = 10, .kind = .button, .text = "CHAT", .min_size = .{ .w = 124, .h = 12 } }) catch unreachable;
-    view.add(.{ .id = 11, .kind = .button, .text = "CQ", .min_size = .{ .w = 124, .h = 12 } }) catch unreachable;
-    view.add(.{ .id = 12, .kind = .button, .text = "EHAGAKI", .min_size = .{ .w = 124, .h = 12 } }) catch unreachable;
-    view.end();
-    const indicator_y: i16 = switch (runtime.focused_id orelse 10) {
-        11 => 25,
-        12 => 38,
-        else => 12,
-    };
-    view.add(.{ .id = 30, .kind = .filled_rect, .min_size = .{ .w = 2, .h = 10 }, .offset = .{ .y = indicator_y }, .animation = ui.animation.Animation.easeOut(180) }) catch unreachable;
-    view.end();
-    runtime.finishView(&view) catch unreachable;
+    var view = View.begin(&runtime);
+    {
+        var screen = view.column(.screen, .{ .padding = 2, .spacing = 2 });
+        defer screen.end();
+        view.text(.title, "MO-BUS");
+        view.checkbox(.wifi, "WI-FI", wifi);
+        view.toggleWith(.bluetooth, "BT", bluetooth, .{ .width = 116 });
+        view.progressWith(.progress, progress, 100, .{ .width = 116 });
+        view.icon(.icon, ui.widgets.icons.wifi);
+    }
+    view.finish();
+}
+
+fn activate() void {
+    const focused = runtime.action(.activate) orelse return;
+    if (focused == View.childId(View.rootId(.screen), .wifi)) {
+        wifi = !wifi;
+        progress = if (progress == 100) 0 else progress + 25;
+    } else {
+        bluetooth = !bluetooth;
+    }
+    rebuild();
 }
 
 pub fn main() noreturn {
@@ -41,6 +51,7 @@ pub fn main() noreturn {
     var last_cycles = fun.time.nowCycles();
     var cycle_remainder: u32 = 0;
     var previous_pressed = false;
+    var pressed_at: u32 = 0;
     runtime.update(now_ms);
     rebuild();
 
@@ -55,12 +66,16 @@ pub fn main() noreturn {
         runtime.update(now_ms);
 
         const pressed = fun.input.isButtonPressed();
-        if (pressed and !previous_pressed) {
-            _ = runtime.action(.down);
-            rebuild();
+        if (pressed and !previous_pressed) pressed_at = now_ms;
+        if (!pressed and previous_pressed) {
+            const held_ms = now_ms -% pressed_at;
+            if (held_ms >= 800) {
+                activate();
+            } else {
+                _ = runtime.action(.down);
+            }
         }
         previous_pressed = pressed;
-
         adapter.draw(&runtime) catch unreachable;
         fun.time.delayMs(10);
     }
